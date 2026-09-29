@@ -296,6 +296,53 @@ def test_paginator_is_reusable() -> None:
     assert fetch_count[0] == 2
 
 
+@pytest.mark.parametrize(
+    ("initial_cursor", "next_cursors"),
+    [(None, ("c1", "c1")), (None, ("c1", "c2", "c1")), ("resume", ("resume",))],
+)
+def test_paginator_rejects_cursor_cycles(
+    initial_cursor: str | None, next_cursors: tuple[str, ...]
+) -> None:
+    seen: list[str | None] = []
+
+    def fetch(cursor: str | None) -> Page[int]:
+        seen.append(cursor)
+        index = min(len(seen) - 1, len(next_cursors) - 1)
+        return Page(items=(len(seen),), has_more=True, next_cursor=next_cursors[index])
+
+    pages = iter(Paginator(fetch, initial_cursor=initial_cursor))
+    for index in range(len(next_cursors)):
+        assert next(pages).items == (index + 1,)
+    with pytest.raises(UnexpectedResponseError, match="repeated cursor"):
+        next(pages)
+    assert seen == [initial_cursor, *next_cursors[:-1]]
+
+
+@pytest.mark.parametrize(
+    ("initial_cursor", "next_cursors"),
+    [(None, ("c1", "c1")), (None, ("c1", "c2", "c1")), ("resume", ("resume",))],
+)
+def test_async_paginator_rejects_cursor_cycles(
+    initial_cursor: str | None, next_cursors: tuple[str, ...]
+) -> None:
+    seen: list[str | None] = []
+
+    async def fetch(cursor: str | None) -> Page[int]:
+        seen.append(cursor)
+        index = min(len(seen) - 1, len(next_cursors) - 1)
+        return Page(items=(len(seen),), has_more=True, next_cursor=next_cursors[index])
+
+    async def run() -> None:
+        pages = aiter(AsyncPaginator(fetch, initial_cursor=initial_cursor))
+        for index in range(len(next_cursors)):
+            assert (await anext(pages)).items == (index + 1,)
+        with pytest.raises(UnexpectedResponseError, match="repeated cursor"):
+            await anext(pages)
+
+    asyncio.run(run())
+    assert seen == [initial_cursor, *next_cursors[:-1]]
+
+
 def test_paginator_iter_items_flattens_pages() -> None:
     pages = [
         Page(items=(1, 2), has_more=True, next_cursor="c1"),

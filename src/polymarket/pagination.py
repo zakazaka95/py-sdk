@@ -94,6 +94,7 @@ class Paginator(Generic[T]):
 
     def _iter_pages(self) -> Iterator[Page[T]]:
         cursor = self._initial_cursor
+        seen_cursors = {cursor}
         while True:
             page = self._fetch(cursor)
             yield page
@@ -103,6 +104,9 @@ class Paginator(Generic[T]):
                 raise UnexpectedResponseError(
                     "Paginated response set has_more=True without a next cursor."
                 )
+            if page.next_cursor in seen_cursors:
+                raise UnexpectedResponseError("Paginated response returned a repeated cursor.")
+            seen_cursors.add(page.next_cursor)
             cursor = page.next_cursor
 
     def to_arrow(self, *, limit: LimitArg) -> Any:
@@ -168,6 +172,7 @@ class AsyncPaginator(Generic[T]):
 
     async def _iter_pages(self) -> AsyncIterator[Page[T]]:
         cursor = self._initial_cursor
+        seen_cursors = {cursor}
         while True:
             page = await self._fetch(cursor)
             yield page
@@ -177,6 +182,9 @@ class AsyncPaginator(Generic[T]):
                 raise UnexpectedResponseError(
                     "Paginated response set has_more=True without a next cursor."
                 )
+            if page.next_cursor in seen_cursors:
+                raise UnexpectedResponseError("Paginated response returned a repeated cursor.")
+            seen_cursors.add(page.next_cursor)
             cursor = page.next_cursor
 
     async def _iter_items(self) -> AsyncIterator[T]:
